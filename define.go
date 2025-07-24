@@ -16,6 +16,7 @@ type Task struct {
 	DoStatus string    `json:"do_status"`
 	CreateAt time.Time `json:"create_at"`
 	Payload  string    `json:"payload"` // Task-specific data (e.g., JSON)
+	Result   string    `json:"result"`
 }
 
 type RegistrationRequest struct {

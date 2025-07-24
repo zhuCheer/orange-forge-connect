@@ -51,7 +51,7 @@ func NewServer(serverName string) *Server {
 		RunAt:            time.Now(),
 		SessionId:        uuid.New().String(),
 		statusFunc:       listenTaskStatus,
-		singleTimeout:    time.Minute,
+		singleTimeout:    30 * time.Second,
 		longLoopDuration: 10 * time.Second,
 		taskChan:         make(map[string]chan Task),
 		taskWaitTick:     1 * time.Second,
@@ -70,11 +70,6 @@ func (s *Server) SetTaskWaitTick(duration time.Duration) *Server {
 	return s
 }
 
-func (s *Server) SetTaskTimeout(duration time.Duration) *Server {
-	s.singleTimeout = duration
-	return s
-}
-
 // WithRdx add the fresh redis connect
 func (s *Server) WithRdx(conn rdx.Conn) *Server {
 	s.mutex.Lock()
@@ -83,7 +78,7 @@ func (s *Server) WithRdx(conn rdx.Conn) *Server {
 	return s
 }
 
-// WithRdx add the fresh redis connect
+// WithSingleTimeout set single task timeout duration
 func (s *Server) WithSingleTimeout(timeout time.Duration) *Server {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -108,7 +103,7 @@ func (s *Server) RunSingleTask(appID, taskType, payload string) (taskID, respBod
 		return
 	}
 	taskID, err = s.addTask(appID, taskType, payload)
-
+	sttm := time.Now()
 	if s.IsDebug {
 		log.Println("[DEBUG] add task:", taskID)
 	}
@@ -126,10 +121,11 @@ func (s *Server) RunSingleTask(appID, taskType, payload string) (taskID, respBod
 	// 等待任务结果或超时
 	select {
 	case task := <-resultChan:
-		return taskID, task.Payload, nil
+		return taskID, task.Result, nil
 	case <-time.After(s.singleTimeout):
+		during := time.Since(sttm)
 		if s.IsDebug {
-			log.Println("[DEBUG] task listen timeout:", taskID)
+			consoleLog("DEBUG", "task listen timeout during: %v， taskID: %v", during, taskID)
 		}
 		return taskID, "", fmt.Errorf("timeout waiting for task %s", taskID)
 	}
@@ -151,7 +147,7 @@ func (s *Server) AppLiveCheck(appID string) (err error) {
 	}
 	sincTm := now - clientInfo.LastPingTime
 	if sincTm > 90 {
-		clientInfo.DoStatus = "timeout"
+		clientInfo.DoStatus = STATUS_TIMEOUT
 		infoJSON, _ := json.Marshal(clientInfo)
 		_, err = s.redisConn.Do("SETEX", cacheKey, RDX_EXPIRE, infoJSON)
 
@@ -248,7 +244,7 @@ func (s *Server) apiPingHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 
 	if clientJson != "" {
-		json.Unmarshal([]byte(clientJson), &clientInfo)
+		_ = json.Unmarshal([]byte(clientJson), &clientInfo)
 		clientInfo.LastPingTime = now
 		clientInfo.DoStatus = "registered"
 	}
@@ -263,7 +259,7 @@ func (s *Server) apiPingHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// apiPushTaskStatus
+// apiPushTaskStatus client return task information
 func (s *Server) apiPushTaskStatus(w http.ResponseWriter, r *http.Request) {
 	providedSign, appID, dateTime, reqBody, err := getRequestArgs(r)
 	if err != nil {
@@ -274,22 +270,22 @@ func (s *Server) apiPushTaskStatus(w http.ResponseWriter, r *http.Request) {
 		s.errorReport(w, 1, "signature verification failed")
 		return
 	}
-	taskReqData := Task{}
-	json.Unmarshal([]byte(reqBody), &taskReqData)
-	if taskReqData.TaskID == "" {
+	taskReciveData := Task{}
+	_ = json.Unmarshal([]byte(reqBody), &taskReciveData)
+	if taskReciveData.TaskID == "" {
 		writeJSON(w, Response{Code: 1, Message: "task payload not found"})
 		return
 	}
 
-	taskKey := "client:" + appID + ":task:" + taskReqData.TaskID
+	taskKey := "client:" + appID + ":task:" + taskReciveData.TaskID
 	taskJSON, err := rdx.Bytes(s.redisConn.Do("GET", taskKey))
 	if err != nil {
 		s.errorReport(w, 1, "task info not found,"+err.Error())
 		return
 	}
 	saveTaskInfo := Task{}
-	json.Unmarshal(taskJSON, &saveTaskInfo)
-	saveTaskInfo.DoStatus = taskReqData.DoStatus
+	_ = json.Unmarshal(taskJSON, &saveTaskInfo)
+	saveTaskInfo.DoStatus = taskReciveData.DoStatus
 
 	saveTaskInfoJson, _ := json.Marshal(saveTaskInfo)
 	_, err = s.redisConn.Do("SETEX", taskKey, RDX_EXPIRE, saveTaskInfoJson)
@@ -298,17 +294,17 @@ func (s *Server) apiPushTaskStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if taskReqData.DoStatus != STATUS_DOING {
+	if taskReciveData.DoStatus != STATUS_DOING {
 		// remove task process key
 		procQueueKey := "client:" + appID + ":processing_queue"
-		s.redisConn.Do("LREM", procQueueKey, 1, taskReqData.TaskID)
+		s.redisConn.Do("LREM", procQueueKey, 1, taskReciveData.TaskID)
 		if s.IsDebug {
-			log.Println("[DEBUG] LREM:", procQueueKey, taskReqData.TaskID)
+			log.Println("[DEBUG] LREM:", procQueueKey, taskReciveData.TaskID)
 		}
 	}
 
-	if _, ok := s.taskChan[taskReqData.TaskID]; ok {
-		s.taskChan[taskReqData.TaskID] <- taskReqData
+	if _, ok := s.taskChan[taskReciveData.TaskID]; ok {
+		s.taskChan[taskReciveData.TaskID] <- taskReciveData
 	}
 
 	writeJSON(w, Response{Code: 0, Message: "task status updated successfully"})
@@ -336,9 +332,6 @@ func (s *Server) apiGetTaskHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.longLoopDuration)
 	defer cancel()
 
-	// 创建独立的结果通道
-	taskResultChan := make(chan string, 1)
-
 	// 尝试立即获取任务
 	taskID, err := rdx.String(s.redisConn.Do("RPOPLPUSH", queueKey, procQueueKey))
 	if err == nil && taskID != "" {
@@ -346,6 +339,8 @@ func (s *Server) apiGetTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 创建独立的结果通道
+	taskResultChan := make(chan string, 1)
 	// 启动轮询协程
 	go func() {
 		ticker := time.NewTicker(s.taskWaitTick)
@@ -357,10 +352,8 @@ func (s *Server) apiGetTaskHandler(w http.ResponseWriter, r *http.Request) {
 			case <-ticker.C:
 				taskID, err := rdx.String(s.redisConn.Do("RPOPLPUSH", queueKey, procQueueKey))
 				if err == nil && taskID != "" {
-					select {
-					case taskResultChan <- taskID:
-					default:
-					}
+					// 非阻塞发送
+					taskResultChan <- taskID
 					return
 				}
 			}

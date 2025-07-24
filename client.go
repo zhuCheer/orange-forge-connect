@@ -17,16 +17,16 @@ import (
 	"time"
 )
 
-type TaskFunc func(task *Task)
+type TaskFunc func(task *Task) (result string)
 
 type Client struct {
 	AppID         string
+	IsDebug       bool
 	registered    bool
 	secret        string
 	baseSecret    string
 	serverAddr    string
 	mu            sync.Mutex
-	timeout       time.Duration
 	checkInterval int
 	taskInterval  time.Duration
 	skipSSL       bool
@@ -43,9 +43,8 @@ func NewForge(appID, secret string) *Client {
 		AppID:         appID,
 		secret:        secret,
 		baseSecret:    DEFAULT_SECRET,
-		timeout:       120 * time.Second,
 		checkInterval: 10,
-		taskInterval:  5 * time.Second,
+		taskInterval:  1 * time.Second,
 		HttpClient:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
@@ -55,6 +54,14 @@ func (c *Client) SetHttpClient(client *http.Client) *Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.HttpClient = client
+	return c
+}
+
+// SetDebug set debug model
+func (c *Client) SetDebug(debug bool) *Client {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.IsDebug = debug
 	return c
 }
 
@@ -86,11 +93,11 @@ func (c *Client) SetSkipSSL(i bool) *Client {
 	return c
 }
 
-func (c *Client) SetTimeout(timeout time.Duration) *Client {
+func (c *Client) SetTaskDelay(timeout time.Duration) *Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if timeout > 0 {
-		c.timeout = timeout
+		c.taskInterval = timeout
 	}
 	return c
 }
@@ -146,7 +153,7 @@ func (c *Client) Regist(callback TaskFunc) (respData string, errno int, err erro
 	}
 	c.registered = true
 	consoleLog("INFO", "AgentInit success <===> forgeServer %s", c.serverAddr)
-	//go c.helthCheck(c.checkInterval)
+	go c.helthCheck(c.checkInterval)
 	go c.listenGetTask()
 	return
 }
@@ -165,19 +172,42 @@ func (c *Client) listenGetTask() {
 	for {
 		task, errno, err := c.GetTask()
 		if err != nil && errno == 2 {
-			consoleLog("INFO", "GetTask context canceled or no task.")
+			if c.IsDebug {
+				consoleLog("DEBUG", "GetTask context canceled or no task.")
+			}
 		}
 		if err != nil && errno != 2 {
 			consoleLog("ERROR", "GetTask context error: %v, errno: %d", err, errno)
-			return
+			break
 		}
 		if task != nil {
-			go c.callbackFunc(task)
+			go func() {
+				result := c.callbackFunc(task)
+				task.Result = result
+				task.DoStatus = STATUS_SUCCESS
+				c.pushTaskResult(task)
+			}()
 		}
 		time.Sleep(c.taskInterval)
 	}
-	consoleLog("ERROR", "exit porcess")
+	consoleLog("ERROR", "------------disconnect server------------")
 	os.Exit(1)
+}
+
+// Ping sends a ping request to the server
+func (c *Client) pushTaskResult(task *Task) {
+	c.ensureConfig()
+	params, _ := json.Marshal(task)
+	resp, _, err := c.SendHTTPRequest("reportTask", string(params))
+
+	if err != nil {
+		consoleLog("ERROR", "pushTaskResult response: %v", resp)
+		return
+	}
+	respData, _ := resp.(string)
+
+	consoleLog("DEBUG", "pushTaskResult response: %s", respData)
+	return
 }
 
 // helthCheck 连接健康检查
@@ -201,7 +231,10 @@ func (c *Client) helthCheck(second int) {
 			consoleLog("INFO", "ConnectHealthCheck ticker stopped.")
 			return
 		case <-ticker.C:
-			consoleLog("DEBUG", "ConnectHealthCheck interval %v.", second)
+			if c.IsDebug {
+				consoleLog("DEBUG", "ConnectHealthCheck interval %v.", second)
+			}
+
 			err := c.Ping()
 			if err != nil {
 				errCnt++
@@ -231,7 +264,10 @@ func (c *Client) Ping() (err error) {
 	}
 	respData, _ := resp.(string)
 
-	consoleLog("DEBUG", "ping response: %s", respData)
+	if c.IsDebug {
+		consoleLog("DEBUG", "ping response: %s", respData)
+	}
+
 	return
 }
 
@@ -281,13 +317,15 @@ func (c *Client) SendHTTPRequest(api, payload string) (interface{}, int, error) 
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
-	fmt.Println("============>", string(body))
 	// 检查响应状态码
 	if resp.StatusCode != http.StatusOK {
 		return apiResp, 1, fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, payload)
 	}
 	respData := Response{}
-	json.Unmarshal(body, &respData)
+	err = json.Unmarshal(body, &respData)
+	if err != nil {
+		return apiResp, 1, err
+	}
 
 	if respData.Code > 0 {
 		return apiResp, respData.Code, errors.New(respData.Message)
