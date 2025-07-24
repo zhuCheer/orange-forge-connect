@@ -1,66 +1,95 @@
-# orange-forge-agent 反向通信库
+# orange-forge-agent: Reverse Communication Library
 
-## 背景介绍
+## Background
 
-在传统的 B/S 架构中，服务端通常通过 HTTP 服务与浏览器、CURL、Python 等客户端进行通信，用户可以直接通过浏览器、命令行工具或编程语言的 HTTP 库（如 Python 的 requests）访问服务端接口。
+In a traditional B/S (Browser/Server) architecture, the server usually exposes HTTP APIs that can be accessed by browsers, command-line tools like CURL, or programming languages such as Python (using the requests library).
 
-### 传统 B/S 架构通信流程
+### Typical B/S Communication Flow
 
 ```mermaid
 sequenceDiagram
-    participant Client as 浏览器/脚本/工具
-    participant Server as 服务端
-    Client->>Server: HTTP 请求（如注册、查询、操作）
-    Server-->>Client: 返回响应（数据/状态）
+    participant Client as Browser/Script/Tool
+    participant Server as Server
+    Client->>Server: HTTP request (register, query, operate)
+    Server-->>Client: Response (data/status)
 ```
 
-然而，在 DevOps、自动化运维等场景下，常常需要服务端主动下发指令到大量客户端（如批量部署、健康检查等）。如果让每台目标机器都暴露 HTTP 服务供平台调用，既不安全也不现实。因此，我们需要一种能够从服务端高效、安全地下发指令到客户端集群的通信组件。
+However, in DevOps and automated operations scenarios, the server often needs to actively send commands to many clients (for example, batch deployment, health checks, etc.). If every target machine exposes its own HTTP service for the platform to call, it becomes insecure and hard to manage. So, we need a communication component that allows the server to efficiently and securely send instructions to a cluster of clients.
 
-### 传统服务端主动下发指令的局限性
+### The Problem with Traditional Server-to-Client Command Delivery
 
 ```mermaid
 flowchart TD
-    subgraph 传统做法
-        Server[服务端] -- 需要访问 --> Client1[客户端A暴露HTTP服务]
-        Server -- 需要访问 --> Client2[客户端B暴露HTTP服务]
-        Server -- 需要访问 --> ClientN[客户端N暴露HTTP服务]
-    end
-    note right of Server: 每台客户端都需暴露端口，安全性和可维护性差
+    Server[Server]
+    Client1[Client A exposes HTTP service]
+    Client2[Client B exposes HTTP service]
+    ClientN[Client N exposes HTTP service]
+    Server -- access --> Client1
+    Server -- access --> Client2
+    Server -- access --> ClientN
 ```
 
-### 典型场景
-- DevOps 工具中的批量服务部署
-- 客户端健康检查与状态上报
-- 自动化运维批量任务下发
-- 远程命令执行
+> Every client must expose a port, which is insecure and hard to maintain.
 
-## 通信方式对比
+### Typical Use Cases
+- Batch deployment in DevOps tools
+- Client health checks and status reporting
+- Automated operations and batch task delivery
+- Remote command execution
 
-为实现服务端与客户端的双向通信，常见有两种方案：
+## Communication Approaches
 
-1. **长连接（如 WebSocket）**
-   - 优点：通信实时、流畅，信息传递延迟低。
-   - 缺点：分布式部署需引入连接管理组件，开发和运维复杂，异常排查困难。
+To enable two-way communication between server and clients, there are two common approaches:
 
-2. **HTTP 轮询**
-   - 优点：实现简单，服务端易于分布式扩展，无需复杂组件，排查问题容易。
-   - 缺点：通信实时性依赖轮询频率，体验略有顿挫。
+1. **Long Connection (e.g., WebSocket)**
+   - Pros: Real-time, smooth communication with low latency.
+   - Cons: Distributed deployment requires connection management, which is complex to develop and maintain, and hard to debug.
 
-本库采用第二种方案——**HTTP 轮询**，对服务端和客户端进行了高度封装，仅需简单调用即可实现高效的反向通信服务。
+2. **HTTP Polling**
+   - Pros: Simple to implement, easy to scale the server horizontally, no need for complex components, and easier to debug.
+   - Cons: Real-time experience depends on polling frequency, so it may feel a bit laggy.
 
----
-
-## 特性
-
-- **HTTP轮询反向通信**：无需暴露客户端端口，服务端可主动下发指令
-- **分布式友好**：服务端无状态，易于横向扩展
-- **高度封装**：服务端、客户端均只需少量代码即可集成
-- **易于排查**：无复杂连接管理，问题定位简单
-- **适用广泛**：批量任务、健康检查、远程命令等
+This library uses the second approach—**HTTP polling**—and provides a simple, high-level API for both server and client. You only need a few lines of code to build an efficient reverse communication service.
 
 ---
 
-## 安装
+## Communication Flow Examples
+
+### 1. Client Actively Calls the Server
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    Client->>Server: HTTP request (register, heartbeat, fetch task)
+    Server-->>Client: Response (task/status)
+```
+
+### 2. Server Actively Sends Commands to Client (Polling Mode)
+
+```mermaid
+flowchart TD
+    subgraph Polling Loop
+        Client-->|polls regularly|Server
+        Server-->|has task|Client
+        Client-->|returns result|Server
+        Server-->|no task|Client
+    end
+```
+
+---
+
+## Features
+
+- **Reverse communication via HTTP polling:** No need for clients to expose ports; the server can send commands to clients.
+- **Distributed friendly:** The server is stateless and easy to scale horizontally.
+- **Highly abstracted:** Both server and client require only a few lines of code to integrate.
+- **Easy to debug:** No complex connection management; issues are easier to track down.
+- **Versatile:** Suitable for batch tasks, health checks, remote commands, and more.
+
+---
+
+## Installation
 
 ```bash
 go get github.com/zhuCheer/orange-forge-connect
@@ -68,22 +97,22 @@ go get github.com/zhuCheer/orange-forge-connect
 
 ---
 
-## 快速开始
+## Quick Start
 
-### 服务端示例
+### Server Example
 
 ```go
-// 初始化服务端对象
+// Initialize the server object
 service.ForgeServer = forge_connect.NewServer("orange-forge-board").
     SetDebug().
     SetTaskWaitTick(500 * time.Millisecond)
 
-// 初始化路由
+// Initialize routes
 service.ForgeServer.Handler()
 ```
 
 ```go
-// 路由绑定
+// Route binding
 r.ALL("/orange-forge/*", controller.ServerApi)
 
 func ServerApi(c *app.Context) error {
@@ -97,21 +126,21 @@ func ServerApi(c *app.Context) error {
 }
 ```
 
-### 客户端示例
+### Client Example
 
 ```go
-// 初始化客户端
+// Initialize the client
 service.ForgeClient = forge_connect.NewForge("appid", "secret").
     SetDebug(true).
     SetServerAddr("http://127.0.0.1:8890")
 
-// 注册回调方法
+// Register a callback function
 _, _, err := service.ForgeClient.Regist(CallbackTask)
 if err != nil {
-    // 错误处理
+    // Error handling
 }
 
-// 回调方法示例
+// Example callback function
 func CallbackTask(task *forge_connect.Task) (result string) {
     logger.Infow("CallbackTask Run------------->", "task", task)
     if task == nil {
@@ -123,44 +152,18 @@ func CallbackTask(task *forge_connect.Task) (result string) {
 
 ---
 
-## 通信流程
+## Typical Scenarios
 
-### 1. 客户端主动调用服务端
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server
-    Client->>Server: 注册/心跳/拉取任务（HTTP）
-    Server-->>Client: 返回响应（任务/状态）
-```
-
-### 2. 服务端主动下发指令到客户端（轮询模式）
-
-```mermaid
-flowchart TD
-    subgraph 轮询循环
-        Client-->|定时轮询|Server
-        Server-->|有任务|Client
-        Client-->|回传结果|Server
-        Server-->|无任务|Client
-    end
-```
+- DevOps automation and operations
+- Batch task delivery
+- Client health checks
+- Remote command execution
 
 ---
 
-## 典型应用场景
+## Contributing
 
-- DevOps 自动化运维
-- 批量任务下发
-- 客户端健康检查
-- 远程命令执行
-
----
-
-## 贡献
-
-欢迎 Issue 和 PR！如有建议或需求，欢迎提交。
+Issues and PRs are welcome! If you have suggestions or needs, feel free to submit them.
 
 ---
 
@@ -170,5 +173,5 @@ MIT
 
 ---
 
-如需更多细节，请参考源码及注释。
+For more details, please refer to the source code and comments.
 
