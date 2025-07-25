@@ -31,6 +31,27 @@ flowchart TD
 
 > 每台客户端都需暴露端口，安全性和可维护性差
 
+
+### orange-forge-agent 反向通信流程
+
+```mermaid
+flowchart TD
+    ClientA[Client A]
+    ClientB[Client B]
+    ClientN[Client N]
+    Server[Server]
+    ClientA -- polls for tasks --> Server
+    ClientB -- polls for tasks --> Server
+    ClientN -- polls for tasks --> Server
+    Server -- delivers command --> ClientA
+    Server -- delivers command --> ClientB
+    Server -- delivers command --> ClientN
+```
+
+> 客户端无需暴露任何端口，所有通信均由客户端轮询服务端发起，安全且易于维护
+
+---
+
 ### 典型场景
 - DevOps 工具中的批量服务部署
 - 客户端健康检查与状态上报
@@ -128,40 +149,6 @@ func CallbackTask(task *forge_connect.Task) (result string) {
 
 ---
 
-## 通信流程
-
-### 1. 客户端主动调用服务端
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server
-    Client->>Server: 注册/心跳/拉取任务（HTTP）
-    Server-->>Client: 返回响应（任务/状态）
-```
-
-### 2. 服务端主动下发指令到客户端（轮询模式）
-
-```mermaid
-flowchart TD
-    subgraph 轮询循环
-        Client-->|定时轮询|Server
-        Server-->|有任务|Client
-        Client-->|回传结果|Server
-        Server-->|无任务|Client
-    end
-```
-
----
-
-## 典型应用场景
-
-- DevOps 自动化运维
-- 批量任务下发
-- 客户端健康检查
-- 远程命令执行
-
----
 
 ## 贡献
 

@@ -77,6 +77,24 @@ flowchart TD
     end
 ```
 
+### Reverse Communication Flow with orange-forge-agent
+
+```mermaid
+flowchart TD
+    ClientA[Client A]
+    ClientB[Client B]
+    ClientN[Client N]
+    Server[Server]
+    ClientA -- polls for tasks --> Server
+    ClientB -- polls for tasks --> Server
+    ClientN -- polls for tasks --> Server
+    Server -- delivers command --> ClientA
+    Server -- delivers command --> ClientB
+    Server -- delivers command --> ClientN
+```
+
+> Clients do not need to expose any ports. All communication is initiated by the clients polling the server, making it secure and easy to maintain.
+
 ---
 
 ## Features
