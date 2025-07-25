@@ -77,7 +77,7 @@ flowchart TD
     end
 ```
 
-### Reverse Communication Flow with orange-forge-agent
+### 3.Reverse Communication Flow with orange-forge-agent
 
 ```mermaid
 flowchart TD
@@ -173,14 +173,6 @@ func CallbackTask(task *forge_connect.Task) (result string) {
 
 ---
 
-## Typical Scenarios
-
-- DevOps automation and operations
-- Batch task delivery
-- Client health checks
-- Remote command execution
-
----
 
 ## Contributing
 
