@@ -460,13 +460,14 @@ func (s *Server) verifySignature(appID, payload, dateTime, providedSign string) 
 
 	clientInfo, err := s.refreshClientInfo(appID)
 	if err != nil {
-		if s.IsDebug {
-			log.Println("[debug] appid is not registered", appID, dateTime)
-		}
+		consoleRouter("[ERROR]", fmt.Sprintf("refreshClientInfo error: %v", err))
 		return false
 	}
 
 	expectedSign := s.computeSignature(clientInfo.AppID, clientInfo.Secret, payload, dateTime)
+	if s.IsDebug {
+		log.Printf("[debug] expectedSign: %v, input:%v  ismatch:%v", expectedSign, providedSign, expectedSign == providedSign)
+	}
 	return expectedSign == providedSign
 }
 
