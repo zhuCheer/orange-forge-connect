@@ -101,29 +101,32 @@ go get github.com/zhuCheer/orange-forge-connect
 
 ### Server Example
 
-```go
-// Initialize the server object
-service.ForgeServer = forge_connect.NewServer("orange-forge-board").
-    SetDebug().
-    SetTaskWaitTick(500 * time.Millisecond)
 
-// Initialize routes
-service.ForgeServer.Handler()
+For server-side implementation examples, please refer to example/gin-forg-server
+
+```go
+
+cd example/gin-forg-server
+go mod tidy
+go run main.go
+
 ```
 
-```go
-// Route binding
-r.ALL("/orange-forge/*", controller.ServerApi)
+The server requires Redis to be installed and running beforehand.
+The core implementation involves binding the server API routes to HTTP routes.
 
-func ServerApi(c *app.Context) error {
-    rdxconn, err := c.GetRedis("default")
-    if err != nil {
-        define.ErrorData(c, 500, err.Error())
-    }
-    serverHttpHandler := service.ForgeServer.WithRdx(rdxconn).Handler()
-    c.RunHttpHandler(serverHttpHandler)
-    return nil
+```go
+func BindForgeServer() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		conn := redisPool.Get()
+		defer conn.Close() // Must be closed after use, otherwise the connection will not be returned to the pool
+		serverHttpHandler := ForgeServer.WithRdx(conn).Handler()
+
+		// Convert gin context to standard http request and response
+		serverHttpHandler.ServeHTTP(c.Writer, c.Request)
+	}
 }
+
 ```
 
 ### Client Example

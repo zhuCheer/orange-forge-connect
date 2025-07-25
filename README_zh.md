@@ -75,30 +75,32 @@ go get github.com/zhuCheer/orange-forge-connect
 
 ### 服务端示例
 
-```go
-// 初始化服务端对象
-service.ForgeServer = forge_connect.NewServer("orange-forge-board").
-    SetDebug().
-    SetTaskWaitTick(500 * time.Millisecond)
+服务端调用方法可参考 example/gin-forg-server
 
-// 初始化路由
-service.ForgeServer.Handler()
+```go
+
+cd example/gin-forg-server
+go mod tidy
+go run main.go
+
 ```
+服务端启动依赖 redis，需要提前安装 redis 并启动；
+核心调用是将服务端api路由绑定到 HTTP 路由上。
 
 ```go
-// 路由绑定
-r.ALL("/orange-forge/*", controller.ServerApi)
+func BindForgeServer() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		conn := redisPool.Get()
+		defer conn.Close() // Must be closed after use, otherwise the connection will not be returned to the pool
+		serverHttpHandler := ForgeServer.WithRdx(conn).Handler()
 
-func ServerApi(c *app.Context) error {
-    rdxconn, err := c.GetRedis("default")
-    if err != nil {
-        define.ErrorData(c, 500, err.Error())
-    }
-    serverHttpHandler := service.ForgeServer.WithRdx(rdxconn).Handler()
-    c.RunHttpHandler(serverHttpHandler)
-    return nil
+		// Convert gin context to standard http request and response
+		serverHttpHandler.ServeHTTP(c.Writer, c.Request)
+	}
 }
+
 ```
+
 
 ### 客户端示例
 
