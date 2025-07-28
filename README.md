@@ -1,194 +1,125 @@
-# orange-forge-agent: Reverse Communication Library
+# 🍊 Orange Forge Connect SDK
 
-## Background
+## 🌉 Bridging Servers and Clients with Elegance
 
-In a traditional B/S (Browser/Server) architecture, the server usually exposes HTTP APIs that can be accessed by browsers, command-line tools like CURL, or programming languages such as Python (using the requests library).
-
-### Typical B/S Communication Flow
-
-```mermaid
-sequenceDiagram
-    participant Client as Browser/Script/Tool
-    participant Server as Server
-    Client->>Server: HTTP request (register, query, operate)
-    Server-->>Client: Response (data/status)
-```
-
-However, in DevOps and automated operations scenarios, the server often needs to actively send commands to many clients (for example, batch deployment, health checks, etc.). If every target machine exposes its own HTTP service for the platform to call, it becomes insecure and hard to manage. So, we need a communication component that allows the server to efficiently and securely send instructions to a cluster of clients.
-
-### The Problem with Traditional Server-to-Client Command Delivery
-
-```mermaid
-flowchart TD
-    Server[Server]
-    Client1[Client A exposes HTTP service]
-    Client2[Client B exposes HTTP service]
-    ClientN[Client N exposes HTTP service]
-    Server -- access --> Client1
-    Server -- access --> Client2
-    Server -- access --> ClientN
-```
-
-> Every client must expose a port, which is insecure and hard to maintain.
-
-### Typical Use Cases
-- Batch deployment in DevOps tools
-- Client health checks and status reporting
-- Automated operations and batch task delivery
-- Remote command execution
-
-## Communication Approaches
-
-To enable two-way communication between server and clients, there are two common approaches:
-
-1. **Long Connection (e.g., WebSocket)**
-   - Pros: Real-time, smooth communication with low latency.
-   - Cons: Distributed deployment requires connection management, which is complex to develop and maintain, and hard to debug.
-
-2. **HTTP Polling**
-   - Pros: Simple to implement, easy to scale the server horizontally, no need for complex components, and easier to debug.
-   - Cons: Real-time experience depends on polling frequency, so it may feel a bit laggy.
-
-This library uses the second approach—**HTTP polling**—and provides a simple, high-level API for both server and client. You only need a few lines of code to build an efficient reverse communication service.
+> **Secure, Scalable, and Simple Reverse Communication Library for Go**
 
 ---
 
-## Communication Flow Examples
+## 🔍 What is Orange Forge Connect?
 
-### 1. Client Actively Calls the Server
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server
-    Client->>Server: HTTP request (register, heartbeat, fetch task)
-    Server-->>Client: Response (task/status)
-```
-
-### 2. Server Actively Sends Commands to Client (Polling Mode)
-
-```mermaid
-flowchart TD
-    subgraph Polling Loop
-        Client-->|polls regularly|Server
-        Server-->|has task|Client
-        Client-->|returns result|Server
-        Server-->|no task|Client
-    end
-```
-
-### 3.Reverse Communication Flow with orange-forge-agent
-
-```mermaid
-flowchart TD
-    ClientA[Client A]
-    ClientB[Client B]
-    ClientN[Client N]
-    Server[Server]
-    ClientA -- polls for tasks --> Server
-    ClientB -- polls for tasks --> Server
-    ClientN -- polls for tasks --> Server
-    Server -- delivers command --> ClientA
-    Server -- delivers command --> ClientB
-    Server -- delivers command --> ClientN
-```
-
-> Clients do not need to expose any ports. All communication is initiated by the clients polling the server, making it secure and easy to maintain.
+Orange Forge Connect is a **powerful reverse communication SDK** that enables servers to efficiently send commands to multiple clients without requiring clients to expose any ports. Built with simplicity and security in mind, it's the perfect solution for DevOps, automated operations, and remote command execution scenarios.
 
 ---
 
-## Features
+## ✨ Key Features
 
-- **Reverse communication via HTTP polling:** No need for clients to expose ports; the server can send commands to clients.
-- **Distributed friendly:** The server is stateless and easy to scale horizontally.
-- **Highly abstracted:** Both server and client require only a few lines of code to integrate.
-- **Easy to debug:** No complex connection management; issues are easier to track down.
-- **Versatile:** Suitable for batch tasks, health checks, remote commands, and more.
+- 🔄 **Reverse Communication** - Server can push commands to clients without exposed ports
+- 🚀 **Simple Integration** - Minimal code required on both server and client sides
+- 🔌 **HTTP Polling** - No complex connection management, easy to debug and maintain
+- 🔍 **Transparent Design** - Clear communication flow and straightforward architecture
+- 🔐 **Enhanced Security** - Clients initiate all connections, no inbound ports needed
+- 🌐 **Distributed Ready** - Stateless server design for horizontal scaling
 
 ---
 
-## Installation
+## 🛠️ Perfect For
+
+- 🖥️ **DevOps Automation** - Deploy and manage services across multiple machines
+- 🔔 **Health Monitoring** - Collect status reports from distributed clients
+- 📦 **Batch Operations** - Execute commands across your entire infrastructure
+- 🔧 **Remote Management** - Control and configure remote systems securely
+
+---
+
+## 📊 Why Choose Orange Forge Connect?
+
+| Feature | 🍊 Orange Forge | WebSocket Solutions | Direct HTTP Calls |
+|---------|----------------|---------------------|-------------------|
+| Security | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| Simplicity | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ |
+| Scalability | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| Debugging | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ |
+| Implementation | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ |
+
+---
+
+## 🚀 Getting Started in Minutes
+
+### 📥 Installation
 
 ```bash
 go get github.com/zhuCheer/orange-forge-connect
 ```
 
----
-
-## Quick Start
-
-### Server Example
-
-
-For server-side implementation examples, please refer to `example/gin-forg-server`
+### 🖥️ Server Setup
 
 ```go
+// Initialize Redis connection
+conn := redisPool.Get()
+defer conn.Close()
 
-cd example/gin-forg-server
-go mod tidy
-go run main.go
-
+// Create and bind the server handler
+serverHttpHandler := ForgeServer.WithRdx(conn).Handler()
+serverHttpHandler.ServeHTTP(c.Writer, c.Request)
 ```
 
-The server requires Redis to be installed and running beforehand.
-The core implementation involves binding the server API routes to HTTP routes.
-
-```go
-func BindForgeServer() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		conn := redisPool.Get()
-		defer conn.Close() // Must be closed after use, otherwise the connection will not be returned to the pool
-		serverHttpHandler := ForgeServer.WithRdx(conn).Handler()
-
-		// Convert gin context to standard http request and response
-		serverHttpHandler.ServeHTTP(c.Writer, c.Request)
-	}
-}
-
-```
-
-### Client Example
-
-For client usage examples, please refer to `example/gin-forg-client`
+### 📱 Client Setup
 
 ```go
 // Initialize the client
-service.ForgeClient = forge_connect.NewForge("appid", "secret").
+client := forge_connect.NewForge("appid", "secret").
     SetDebug(true).
     SetServerAddr("http://127.0.0.1:8890")
 
 // Register a callback function
-_, _, err := service.ForgeClient.Regist(CallbackTask)
-if err != nil {
-    // Error handling
-}
-
-// Example callback function
-func CallbackTask(task *forge_connect.Task) (result string) {
-    logger.Infow("CallbackTask Run------------->", "task", task)
-    if task == nil {
-        return "not found task"
-    }
-    return "0000000000000000000"
-}
+client.Regist(func(task *forge_connect.Task) string {
+    // Handle the task from server
+    return "Task completed successfully!"
+})
 ```
 
-When all the code is ready, first start the server, then start the client. At this point, you can trigger client tasks by accessing the server's `http://127.0.0.1:8003/ping` endpoint. If everything is normal, you'll immediately see the client's response.
+---
+
+## 🔄 How It Works
+
+```
+┌─────────┐                                  ┌─────────┐
+│         │  1. Poll for tasks periodically  │         │
+│ Client  │ ─────────────────────────────>  │ Server  │
+│         │                                  │         │
+│         │  2. Receive task if available    │         │
+│         │ <─────────────────────────────  │         │
+│         │                                  │         │
+│         │  3. Execute task & return result │         │
+│         │ ─────────────────────────────>  │         │
+└─────────┘                                  └─────────┘
+```
 
 ---
 
+## 👨‍💻 Community & Support
 
-## Contributing
-
-Issues and PRs are welcome! If you have suggestions or needs, feel free to submit them.
-
----
-
-## License
-
-MIT
+- 📝 **Documentation**: Comprehensive guides and API references
+- 🐛 **Issue Tracking**: Fast response to bugs and feature requests
+- 🤝 **Contributions**: PRs are always welcome!
+- 💬 **Community**: Growing network of developers and users
 
 ---
 
-For more details, please refer to the source code and comments.
+## 📜 License
 
+Released under the MIT License - feel free to use, modify, and distribute!
+
+---
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/zhuCheer/orange-forge-connect)
+- [Examples](https://github.com/zhuCheer/orange-forge-connect/tree/main/example)
+- [Report Issues](https://github.com/zhuCheer/orange-forge-connect/issues)
+
+---
+
+**🍊 Orange Forge Connect** - *Connecting your infrastructure, one poll at a time.*
+# 
