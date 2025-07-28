@@ -107,7 +107,6 @@ go run main.go
 ```
 服务端启动依赖 redis，需要提前安装 redis 并启动；
 核心调用是将服务端api路由绑定到 HTTP 路由上。
-
 ```go
 func BindForgeServer() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -119,11 +118,12 @@ func BindForgeServer() gin.HandlerFunc {
 		serverHttpHandler.ServeHTTP(c.Writer, c.Request)
 	}
 }
-
 ```
 
 
 ### 客户端示例
+
+客户端调用方法可参考 example/gin-forg-client
 
 ```go
 // 初始化客户端
@@ -146,6 +146,8 @@ func CallbackTask(task *forge_connect.Task) (result string) {
     return "0000000000000000000"
 }
 ```
+
+代码如果都准备好了，先启动服务端，再启动客户端即，此事可以通过访问服务端 `http://127.0.0.1:8003/ping` 接口来触发客户端任务，如果一切正常即将即可看到客户端的返回。
 
 ---
 

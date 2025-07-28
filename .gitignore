@@ -1,1 +1,3 @@
 /.idea/*
+/example/gin-forge-client/.idea/*
+/example/gin-forge-server/.idea/*

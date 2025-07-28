@@ -120,7 +120,7 @@ go get github.com/zhuCheer/orange-forge-connect
 ### Server Example
 
 
-For server-side implementation examples, please refer to example/gin-forg-server
+For server-side implementation examples, please refer to `example/gin-forg-server`
 
 ```go
 
@@ -149,6 +149,8 @@ func BindForgeServer() gin.HandlerFunc {
 
 ### Client Example
 
+For client usage examples, please refer to `example/gin-forg-client`
+
 ```go
 // Initialize the client
 service.ForgeClient = forge_connect.NewForge("appid", "secret").
@@ -170,6 +172,8 @@ func CallbackTask(task *forge_connect.Task) (result string) {
     return "0000000000000000000"
 }
 ```
+
+When all the code is ready, first start the server, then start the client. At this point, you can trigger client tasks by accessing the server's `http://127.0.0.1:8003/ping` endpoint. If everything is normal, you'll immediately see the client's response.
 
 ---
 
