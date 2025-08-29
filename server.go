@@ -96,6 +96,11 @@ func (s *Server) WithStatusFunc(statusFunc func(i Task)) *Server {
 	return s
 }
 
+// ContinuousTask After Execution Completes, Asynchronously Receive Messages (e.g., Query Logs, Execute Commands)
+func (s *Server)ContinuousTask(appID , taskType, payload string)(err error){
+
+}
+
 // RunSingleTask quickly send a task to the specified appid client and wait for the return
 func (s *Server) RunSingleTask(appID, taskType, payload string) (taskID, respBody string, err error) {
 	err = s.AppLiveCheck(appID)
